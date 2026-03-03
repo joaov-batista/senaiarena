@@ -45,6 +45,13 @@
 
         #victory-screen { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
         #victory-title { font-size: 4rem; margin-bottom: 20px; text-transform: uppercase; font-style: italic; }
+
+        /* Menu de Controles (TAB) */
+        #controls-overlay { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 200; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(10px); color: white; }
+        .controls-box { border: 2px solid var(--neon); padding: 30px; border-radius: 15px; background: rgba(0, 255, 204, 0.05); max-width: 800px; width: 80%; }
+        .controls-list { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left; margin-top: 20px; }
+        .controls-list div { padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; border-left: 3px solid var(--gold); }
+        .item-title { color: var(--gold); font-weight: bold; margin-bottom: 5px; font-size: 1.1rem; }
     </style>
 </head>
 <body>
@@ -79,6 +86,25 @@
         </div>
     </div>
 
+    <div id="controls-overlay">
+        <div class="controls-box">
+            <h2 style="color: var(--neon); text-align: center; margin-top: 0;">MANUAL DA ARENA</h2>
+            <div style="text-align: center; font-size: 1.1rem; margin-bottom: 20px;">
+                <b>MOUSE:</b> Move a unidade (Cima/Baixo) | <b>CLIQUE ESQUERDO:</b> Tiro Normal<br>
+                <b>TECLA E:</b> Lança Granada | <b>TECLA R:</b> Usa o Especial (Peixe)
+            </div>
+            <div class="controls-list">
+                <div><div class="item-title">🔋 Cura / Tiro (cura.png / tiro.png)</div>Cura recupera 30% do HP. Tiro concede tiros triplos temporários.</div>
+                <div><div class="item-title">🛡️ Escudo (shield.png)</div>Gera uma bolha que anula até 3 tiros fracos ou absorve dano de explosões.</div>
+                <div><div class="item-title">💣 Granada (granada.png)</div>Aperte E para lançar. Explode em área ao chegar perto do inimigo.</div>
+                <div><div class="item-title">🐟 Especial (especial.png)</div>Aperte R (requer Mana 100%). Lança uma bomba colossal que detona em área.</div>
+                <div><div class="item-title">❄️ Freeze (freeze.png)</div>Ao pegar, congela todo o time inimigo por exatos 1 segundo.</div>
+                <div><div class="item-title">⚡ Raio (raio.png)</div>Ao pegar, um raio gigante cai do céu em cima de todos os inimigos vivos.</div>
+                <div><div class="item-title">🍒 Cereja (cereja.png)</div>Transforma seus próximos 3 tiros. Se chegarem no lado inimigo sem bater em ninguém, se fragmentam em 3!</div>
+            </div>
+        </div>
+    </div>
+
     <div id="lobby" class="screen hidden">
         <div class="menu-card">
             <h1 style="font-size: 2.5rem;">SALA DE ESPERA</h1>
@@ -101,6 +127,7 @@
             <div class="score-text">
                 <span id="score-val-1" class="score-t1">0</span> <span>X</span> <span id="score-val-2" class="score-t2">0</span>
             </div>
+            <div style="font-size: 0.7rem; color: #888; margin-top: 5px;">SEGURE [TAB] P/ CONTROLES</div>
         </div>
         <div class="team-hud" id="team2-hud" style="color: var(--p2); text-align: right;"></div>
     </div>
@@ -118,24 +145,27 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         
+        // Novas Imagens adicionadas
         const imgs = { 
             p1: new Image(), p2: new Image(), p3: new Image(), p4: new Image(), 
             p5: new Image(), p6: new Image(), p7: new Image(),
             cura: new Image(), tiro: new Image(), 
-            shield: new Image(), especial: new Image(), granada: new Image(), freeze: new Image() 
+            shield: new Image(), especial: new Image(), granada: new Image(), 
+            freeze: new Image(), raio: new Image(), cereja: new Image()
         };
         imgs.p1.src = 'player1.png'; imgs.p2.src = 'player2.png'; imgs.p3.src = 'player3.png'; imgs.p4.src = 'player4.png';
         imgs.p5.src = 'player5.png'; imgs.p6.src = 'player6.png'; imgs.p7.src = 'player7.png';
         imgs.cura.src = 'cura.png'; imgs.tiro.src = 'tiro.png';
         imgs.shield.src = 'shield.png'; imgs.especial.src = 'especial.png'; 
         imgs.granada.src = 'granada.png'; imgs.freeze.src = 'freeze.png';
+        imgs.raio.src = 'raio.png'; imgs.cereja.src = 'cereja.png';
 
         let mySprite = 'p1', myName = 'ALUNO';
         let peer, connections = [], isHost = false, myPlayerId = 'p_0'; 
         let gridOffset = 0, screenShake = 0, particles = [], maxPlayers = 1, clientCounter = 1;
 
-        // Adicionado: explosões
-        let gameState = { players: {}, items: [], bullets: [], explosions: [] };
+        // Novo array para os raios divinos: lightnings
+        let gameState = { players: {}, items: [], bullets: [], explosions: [], lightnings: [] };
         let scores = { t1: 0, t2: 0 }, gameEnded = false;
 
         function selectChar(charId) {
@@ -144,6 +174,7 @@
             document.getElementById('sel-' + charId).classList.add('active');
         }
 
+        // Adicionado: cherryShots no PlayerState
         function initPlayerState(id, name, sprite, team, isAi = false) {
             let teamArr = Object.values(gameState.players).filter(p => p.team === team);
             let idx = teamArr.length;
@@ -153,7 +184,7 @@
             gameState.players[id] = { 
                 id: id, name: name || 'BOT', sprite: sprite, team: team,
                 x: startX, y: startY, hp: 100, isAi: isAi, targetY: startY,
-                triple: 0, shield: 0, mana: 0, grenades: 0, freezeTimer: 0
+                triple: 0, shield: 0, mana: 0, grenades: 0, freezeTimer: 0, cherryShots: 0
             };
         }
 
@@ -182,7 +213,6 @@
                 updateLobbyUI();
 
                 peer.on('connection', conn => {
-                    // FIX MULTIPLAYER: ID único para cada um gerado independente da closure
                     let clientId = 'client_' + clientCounter++;
                     connections.push(conn);
                     conn.on('data', data => handleClientData(clientId, data, conn));
@@ -212,7 +242,7 @@
 
                 conn.on('data', data => {
                     if(data.type === 'lobby_update') { gameState.players = data.players; maxPlayers = data.max; updateLobbyUI(); }
-                    if(data.type === 'welcome') myPlayerId = data.id; // Recebe sua credencial oficial
+                    if(data.type === 'welcome') myPlayerId = data.id; 
                     if(data.type === 'start_game') { gameState = data.state; startActualGame(); }
                     if(data.type === 'sync') gameState = data.state;
                     if(data.type === 'game_over') triggerGameOver(data.winner, data.scores);
@@ -226,7 +256,6 @@
                 let currentCount = Object.keys(gameState.players).length;
                 if(currentCount >= maxPlayers) return;
                 
-                // Balanço de times inteligente (Fix 2v2)
                 let t1Count = Object.values(gameState.players).filter(p => p.team === 1).length;
                 let t2Count = Object.values(gameState.players).filter(p => p.team === 2).length;
                 let assignedTeam = (t1Count <= t2Count) ? 1 : 2;
@@ -241,7 +270,6 @@
                     setTimeout(() => { connections.forEach(c => c.send({ type: 'start_game', state: gameState })); startActualGame(); }, 1500);
                 }
             }
-            // FIX MULTIPLAYER: Lê quem enviou de fato o pacote (data.id) e não o clientId preso da closure
             if(data.type === 'input' && data.id && gameState.players[data.id] && !gameEnded) {
                 if(gameState.players[data.id].freezeTimer <= 0) {
                     gameState.players[data.id].y = data.y;
@@ -262,23 +290,27 @@
         function startActualGame() { document.getElementById('lobby').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); requestAnimationFrame(gameLoop); }
         function copyId() { navigator.clipboard.writeText(document.getElementById('lobby-id').innerText); alert("ID Copiado!"); }
 
+        // --- SISTEMA DE CONTROLES E TAB ---
+        window.addEventListener('keydown', e => {
+            if(e.key === 'Tab') { e.preventDefault(); document.getElementById('controls-overlay').style.display = 'flex'; }
+            let key = e.key.toLowerCase();
+            if(key === 'r') sendAction('special');
+            if(key === 'e') sendAction('grenade');
+        });
+        window.addEventListener('keyup', e => {
+            if(e.key === 'Tab') { document.getElementById('controls-overlay').style.display = 'none'; }
+        });
+
         window.addEventListener('mousemove', e => {
             if(gameEnded || !gameState.players[myPlayerId] || gameState.players[myPlayerId].hp <= 0 || gameState.players[myPlayerId].freezeTimer > 0) return;
             const rect = canvas.getBoundingClientRect();
             let p = gameState.players[myPlayerId];
             p.y = Math.max(0, Math.min(canvas.height - 60, e.clientY - rect.top - 30));
             p.x = p.team === 1 ? Math.max(0, Math.min(440, e.clientX - rect.left - 30)) : Math.max(500, Math.min(canvas.width - 60, e.clientX - rect.left - 30));
-            
-            // Envia seu ID cravado
             if(!isHost && connections[0]) connections[0].send({ type: 'input', id: myPlayerId, x: p.x, y: p.y });
         });
 
         window.addEventListener('mousedown', () => sendAction('shoot'));
-        window.addEventListener('keydown', e => {
-            let key = e.key.toLowerCase();
-            if(key === 'r') sendAction('special');
-            if(key === 'e') sendAction('grenade');
-        });
 
         function sendAction(actionType) {
             if(gameEnded || !gameState.players[myPlayerId] || gameState.players[myPlayerId].hp <= 0 || gameState.players[myPlayerId].freezeTimer > 0) return;
@@ -293,16 +325,21 @@
             const x = p.team === 1 ? p.x + 60 : p.x - 20;
 
             if(actionType === 'shoot') {
-                gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: 0 });
-                if(p.triple > 0) {
-                    gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: -4 });
-                    gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: 4 });
-                    p.triple--;
+                if(p.cherryShots > 0) {
+                    gameState.bullets.push({ owner: pID, team: p.team, type: 'cherry', x, y: p.y + 10, vx: 14 * side, vy: 0 });
+                    p.cherryShots--;
+                } else {
+                    gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: 0 });
+                    if(p.triple > 0) {
+                        gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: -4 });
+                        gameState.bullets.push({ owner: pID, team: p.team, type: 'normal', x, y: p.y + 28, vx: 18 * side, vy: 4 });
+                        p.triple--;
+                    }
                 }
             } 
             else if(actionType === 'special' && p.mana >= 100) {
                 p.mana = 0; 
-                gameState.bullets.push({ owner: pID, team: p.team, type: 'special', x, y: p.y + 10, vx: 22 * side, vy: 0 });
+                gameState.bullets.push({ owner: pID, team: p.team, type: 'special', x, y: p.y + 10, vx: 20 * side, vy: 0 });
             } 
             else if(actionType === 'grenade' && p.grenades > 0) {
                 p.grenades--; 
@@ -343,11 +380,11 @@
             if(!isHost) return;
             let t1C = 0, t2C = 0;
             Object.values(gameState.players).forEach(p => {
-                p.hp = 100; p.triple = 0; p.shield = 0; p.mana = 0; p.grenades = 0; p.freezeTimer = 0;
+                p.hp = 100; p.triple = 0; p.shield = 0; p.mana = 0; p.grenades = 0; p.freezeTimer = 0; p.cherryShots = 0;
                 if(p.team === 1) { p.x = 50; p.y = 200 + (t1C * 150); t1C++; } else { p.x = 890; p.y = 200 + (t2C * 150); t2C++; }
                 p.targetY = p.y;
             });
-            gameState.bullets = []; gameState.items = []; gameState.explosions = [];
+            gameState.bullets = []; gameState.items = []; gameState.explosions = []; gameState.lightnings = [];
             resetForNewRound(gameState, scores);
             connections.forEach(c => c.send({ type: 'restart', state: gameState, scores: scores }));
         }
@@ -379,7 +416,7 @@
         }
 
         function hostLogic() {
-            // IA e Animações Contínuas
+            // Atualiza status de IA e de Jogadores
             Object.values(gameState.players).forEach(p => {
                 if(p.hp > 0) {
                     p.mana = Math.min(100, p.mana + 0.15); 
@@ -395,15 +432,19 @@
                 }
             });
 
-            // Atualização do Tempo de Vida das Explosões
+            // Fade de Explosões e Raios
             for(let i = gameState.explosions.length - 1; i >= 0; i--) {
-                gameState.explosions[i].life -= 0.05; // Ficam na tela um pouco
+                gameState.explosions[i].life -= 0.05; 
                 if(gameState.explosions[i].life <= 0) gameState.explosions.splice(i, 1);
             }
+            for(let i = gameState.lightnings.length - 1; i >= 0; i--) {
+                gameState.lightnings[i].life -= 0.04; 
+                if(gameState.lightnings[i].life <= 0) gameState.lightnings.splice(i, 1);
+            }
 
-            // Spawna Itens
-            if(Math.random() < 0.012) {
-                const dropTypes = ['cura', 'tiro', 'shield', 'granada', 'freeze'];
+            // Drops do Céu
+            if(Math.random() < 0.015) {
+                const dropTypes = ['cura', 'tiro', 'shield', 'granada', 'freeze', 'raio', 'cereja'];
                 const type = dropTypes[Math.floor(Math.random() * dropTypes.length)];
                 gameState.items.push({ x: 300 + Math.random()*400, y: -50, type: type, speed: 2.5 });
             }
@@ -418,94 +459,139 @@
                         else if(it.type === 'shield') p.shield = 3; 
                         else if(it.type === 'granada') p.grenades += 1;
                         else if(it.type === 'freeze') {
-                            // CONGELAMENTO ATUALIZADO (1 Segundo = 60 frames a 60FPS)
-                            Object.values(gameState.players).forEach(enemy => {
-                                if(enemy.team !== p.team && enemy.hp > 0) enemy.freezeTimer = 60; 
-                            });
+                            Object.values(gameState.players).forEach(enemy => { if(enemy.team !== p.team && enemy.hp > 0) enemy.freezeTimer = 60; });
                             screenShake = 5;
+                        }
+                        else if(it.type === 'cereja') {
+                            p.cherryShots += 3; // Ganha 3 tiros gigantes
+                        }
+                        else if(it.type === 'raio') {
+                            // FÚRIA DE ZEUS - Acerta todo mundo do outro time
+                            Object.values(gameState.players).forEach(enemy => {
+                                if(enemy.team !== p.team && enemy.hp > 0) {
+                                    enemy.hp -= 30; // Dano do Raio
+                                    gameState.lightnings.push({x: enemy.x + 30, y: enemy.y, life: 1});
+                                }
+                            });
+                            screenShake = 15;
                         }
                         gameState.items.splice(i, 1);
                     }
                 });
             });
 
-            // Tiros e Explosões (AoE)
+            // Tiros e Física
             for(let i = gameState.bullets.length - 1; i >= 0; i--) {
                 let b = gameState.bullets[i];
                 b.x += b.vx; b.y += b.vy;
                 
                 let hitPlayer = null;
-                let w = b.type === 'normal' ? 20 : 40; 
+                let w = b.type === 'cherry' || b.type === 'special' ? 40 : 20; 
                 
-                // Checa colisão com corpo
+                // Checa colisão
                 Object.values(gameState.players).forEach(p => {
                     if(p.hp > 0 && b.team !== p.team && b.x + w > p.x && b.x < p.x+60 && b.y + w > p.y && b.y < p.y+60) {
                         hitPlayer = p;
                     }
                 });
 
-                // Se bateu em alguém ou saiu da tela, engatilha dano/explosão
-                if(hitPlayer || b.x < -50 || b.x > canvas.width + 50) {
-                    let hitX = b.x + w/2; // Centro de onde bateu
+                // LÓGICA DE AIRBURST (Granada e Especial explodem no ar ao cruzar a arena)
+                let triggeredAirburst = false;
+                if(b.type === 'grenade' || b.type === 'special') {
+                    if(b.team === 1 && b.x > 750) triggeredAirburst = true; // Invadiu a base direita
+                    if(b.team === 2 && b.x < 250) triggeredAirburst = true; // Invadiu a base esquerda
+                }
+
+                // LÓGICA DA CEREJA DIVIDINDO
+                let triggeredCherrySplit = false;
+                if(b.type === 'cherry' && !hitPlayer) {
+                    if(b.team === 1 && b.x > 600) triggeredCherrySplit = true; // Cruzou o meio pra direita
+                    if(b.team === 2 && b.x < 400) triggeredCherrySplit = true; // Cruzou o meio pra esquerda
+                }
+
+                // Processa Eventos de Projéteis
+                if (triggeredCherrySplit) {
+                    // CEREJA ESTILHAÇA! Solta 3 tiros normais/menores
+                    let side = b.team === 1 ? 1 : -1;
+                    gameState.bullets.push({ owner: b.owner, team: b.team, type: 'cherry_small', x: b.x, y: b.y, vx: 15 * side, vy: -5 });
+                    gameState.bullets.push({ owner: b.owner, team: b.team, type: 'cherry_small', x: b.x, y: b.y, vx: 15 * side, vy: 0 });
+                    gameState.bullets.push({ owner: b.owner, team: b.team, type: 'cherry_small', x: b.x, y: b.y, vx: 15 * side, vy: 5 });
+                    gameState.bullets.splice(i, 1);
+                } 
+                else if (triggeredAirburst || hitPlayer || b.x < -100 || b.x > canvas.width + 100) {
+                    let hitX = b.x + w/2; 
                     let hitY = b.y + w/2;
 
                     // GRANADA E ESPECIAL -> EXPLOSÃO EM ÁREA (AoE)
                     if (b.type === 'grenade' || b.type === 'special') {
                         let isSpecial = b.type === 'special';
-                        let radius = isSpecial ? 220 : 120; // 220 pro Especial (Peixe), 120 pra granada
+                        let radius = isSpecial ? 220 : 120; // 220 pro Especial, 120 pra granada
                         let dmg = isSpecial ? 40 : 20;
                         let color = isSpecial ? 'rgba(0, 136, 255, 0.7)' : 'rgba(255, 85, 0, 0.7)';
 
-                        // Registra o círculo visual
                         gameState.explosions.push({x: hitX, y: hitY, radius: radius, color: color, life: 1});
                         screenShake = isSpecial ? 15 : 8;
 
-                        // Aplica o Dano Em Área
                         Object.values(gameState.players).forEach(p => {
                             if (p.hp > 0 && p.team !== b.team) {
                                 let dist = Math.hypot((p.x+30) - hitX, (p.y+30) - hitY);
-                                if (dist <= radius) { // Se estiver dentro do círculo, toma pipoco
+                                if (dist <= radius) { 
                                     let finalDmg = dmg;
-                                    if (p.shield > 0) {
-                                        p.shield = 0; // Quebra o escudo no ato
-                                        finalDmg = Math.max(0, finalDmg - 15); // Escudo tanka 15 da explosão
-                                    }
+                                    if (p.shield > 0) { p.shield = 0; finalDmg = Math.max(0, finalDmg - 15); }
                                     p.hp -= finalDmg;
                                 }
                             }
                         });
                     } 
-                    // TIRO NORMAL -> DANO ÚNICO DIRETO
-                    else if (hitPlayer && b.type === 'normal') {
-                        if(hitPlayer.shield > 0) { hitPlayer.shield--; } 
-                        else { hitPlayer.hp -= 5; }
+                    // CEREJA GIGANTE E HIT DIRETO
+                    else if (hitPlayer && (b.type === 'cherry' || b.type === 'normal' || b.type === 'cherry_small')) {
+                        let dmg = 5; // Normal e cherry_small = 5 dano
+                        if (b.type === 'cherry') dmg = 25; // Hit de cereja grande = 25 dano!
+                        
+                        if(hitPlayer.shield > 0) { 
+                            hitPlayer.shield--; 
+                            if(b.type === 'cherry') hitPlayer.shield = 0; // Cereja grande também quebra o escudo rápido
+                        } else { 
+                            hitPlayer.hp -= dmg; 
+                        }
                         createParticles(hitX, hitY, b.team === 1 ? '#00ff41' : '#ff00ff');
-                        screenShake = 3;
+                        screenShake = b.type === 'cherry' ? 8 : 3;
                     }
                     
-                    gameState.bullets.splice(i, 1);
+                    if(!triggeredCherrySplit) gameState.bullets.splice(i, 1);
                 }
             }
         }
 
         function renderGame() {
-            // Render Círculos de Explosão
+            // Render Raios do Céu
+            gameState.lightnings.forEach(lt => {
+                ctx.fillStyle = `rgba(255, 255, 100, ${lt.life})`;
+                ctx.shadowBlur = 40; ctx.shadowColor = '#ffff00';
+                ctx.fillRect(lt.x - 20, 0, 40, canvas.height); // Pilar de luz de cima a baixo
+                ctx.fillStyle = `rgba(255, 255, 255, ${lt.life})`; // Núcleo branco
+                ctx.fillRect(lt.x - 5, 0, 10, canvas.height);
+                ctx.shadowBlur = 0;
+            });
+
+            // Render Explosões
             gameState.explosions.forEach(exp => {
                 ctx.beginPath();
-                // Efeito que faz o círculo expandir um pouco enquanto some
                 let currentRadius = exp.radius * (1.2 - exp.life);
                 ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2);
                 ctx.fillStyle = exp.color;
-                ctx.globalAlpha = exp.life; // Fica transparente antes de sumir
+                ctx.globalAlpha = exp.life;
                 ctx.fill();
                 ctx.globalAlpha = 1;
             });
 
+            // Render Itens Caindo
             gameState.items.forEach(it => {
                 ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
                 if(imgs[it.type] && imgs[it.type].complete) ctx.drawImage(imgs[it.type], it.x, it.y, 40, 40);
             });
 
+            // Render Tiros
             gameState.bullets.forEach(b => {
                 if(b.type === 'normal') {
                     let color = b.team === 1 ? '#00ff41' : '#ff00ff';
@@ -517,9 +603,16 @@
                 } else if(b.type === 'grenade' && imgs.granada.complete) {
                     ctx.shadowBlur = 10; ctx.shadowColor = '#ff5500';
                     ctx.drawImage(imgs.granada, b.x, b.y, 30, 30);
+                } else if(b.type === 'cherry' && imgs.cereja.complete) {
+                    ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044';
+                    ctx.drawImage(imgs.cereja, b.x, b.y, 40, 40); // Tiro gigante
+                } else if(b.type === 'cherry_small') {
+                    ctx.shadowBlur = 5; ctx.shadowColor = '#ff0044'; ctx.fillStyle = '#ff0044';
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill(); // Tiro pequeno fragmentado
                 }
             });
 
+            // Render Partículas
             particles.forEach((p, i) => {
                 p.x += p.vx; p.y += p.vy; p.life -= 0.05;
                 ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life);
@@ -528,6 +621,7 @@
             });
             ctx.globalAlpha = 1;
 
+            // Render Jogadores
             Object.values(gameState.players).forEach(p => {
                 if(p.hp <= 0) { ctx.globalAlpha = 0.3; }
                 
@@ -567,6 +661,7 @@
                         </div>
                         <div class="hp-bar"><div class="hp-fill" style="width: ${hpShow}%; background: ${color}; box-shadow: 0 0 10px ${color};"></div></div>
                         <div class="mana-bar"><div class="mana-fill" style="width: ${manaShow}%;"></div></div>
+                        <div style="font-size: 0.7rem; color: #ff0044; text-align: right;">${p.cherryShots > 0 ? 'CEREJA ATIVA ('+p.cherryShots+')' : ''}</div>
                     </div>`;
                 if(p.team === 1) t1HTML += html; else t2HTML += html;
             });
