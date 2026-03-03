@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arena Senai: Overdrive</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root { --neon: #00ffcc; --p1: #00ff41; --p2: #ff00ff; --gold: #ffcc00; --bg: #050508; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', Orbitron, sans-serif; margin: 0; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+        
+        .screen { position: absolute; width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle at center, #101020 0%, #000 100%); z-index: 100; transition: 0.5s; }
+        .hidden { opacity: 0; pointer-events: none; transform: scale(1.1); z-index: -1; }
+        .menu-card { background: rgba(0, 0, 0, 0.8); padding: 40px; border-radius: 20px; border: 1px solid var(--neon); backdrop-filter: blur(15px); text-align: center; box-shadow: 0 0 50px rgba(0, 255, 204, 0.15); width: 450px; }
+        h1 { font-size: 3.5rem; text-shadow: 0 0 20px var(--neon); color: var(--neon); margin: 0 0 10px 0; font-style: italic; }
+        
+        input[type="text"] { width: 90%; padding: 10px; background: rgba(255,255,255,0.1); border: 1px solid var(--neon); color: white; font-size: 1.2rem; text-align: center; margin-bottom: 20px; outline: none; }
+        
+        .char-grid { display: flex; justify-content: space-around; margin-bottom: 20px; }
+        .char-select { width: 60px; height: 60px; border: 2px solid #555; cursor: pointer; border-radius: 10px; transition: 0.3s; background-size: cover; background-position: center; }
+        .char-select.active { border-color: var(--gold); box-shadow: 0 0 15px var(--gold); transform: scale(1.1); }
+
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+        button { flex: 1; padding: 12px; font-size: 0.9rem; cursor: pointer; background: transparent; border: 2px solid var(--neon); color: var(--neon); font-weight: bold; transition: 0.3s; text-transform: uppercase; min-width: 45%; }
+        button:hover { background: var(--neon); color: #000; box-shadow: 0 0 20px var(--neon); }
+        .btn-full { width: 100%; flex: none; }
+
+        /* HUD e Placar */
+        #hud { position: absolute; top: 0; width: 100%; display: flex; justify-content: space-between; align-items: flex-start; padding: 15px 50px; box-sizing: border-box; background: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent); z-index: 50; }
+        .team-hud { display: flex; flex-direction: column; gap: 5px; width: 250px; }
+        .hp-label { font-size: 1rem; font-weight: bold; display: flex; justify-content: space-between;}
+        .hp-bar { width: 100%; height: 10px; background: #111; position: relative; border-radius: 5px; overflow: hidden; }
+        .hp-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        
+        #scoreboard { background: rgba(0,0,0,0.8); border: 2px solid var(--gold); padding: 10px 30px; border-radius: 10px; text-align: center; margin-top: -10px; box-shadow: 0 0 20px rgba(255, 204, 0, 0.2); }
+        .score-text { font-size: 2rem; font-weight: bold; color: white; display: flex; gap: 20px; align-items: center;}
+        .score-t1 { color: var(--p1); text-shadow: 0 0 10px var(--p1); }
+        .score-t2 { color: var(--p2); text-shadow: 0 0 10px var(--p2); }
+
+        canvas { background: #000; box-shadow: 0 0 100px rgba(0,0,0,1); }
+        #lobby-players-list { background: rgba(0,0,0,0.5); padding: 15px; border-radius: 10px; text-align: left; margin: 20px 0; min-height: 100px; border: 1px solid #333; }
+        .lobby-slot { padding: 5px; font-size: 1.1rem; border-bottom: 1px solid #222; }
+
+        /* Tela de Vitória Overlay */
+        #victory-screen { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 90; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        #victory-title { font-size: 4rem; margin-bottom: 20px; text-transform: uppercase; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <div id="menu" class="screen">
+        <div class="menu-card">
+            <h1>ARENA SENAI</h1>
+            <p style="color: #888;">OVERDRIVE PROTOCOL</p>
+            
+            <input type="text" id="player-name" placeholder="DIGITE SEU NOME" maxlength="10">
+            
+            <p style="margin: 10px 0; color: #aaa;">SELECIONE SUA UNIDADE</p>
+            <div class="char-grid">
+                <div class="char-select active" id="sel-p1" style="background-image: url('player1.png');" onclick="selectChar('p1')"></div>
+                <div class="char-select" id="sel-p2" style="background-image: url('player2.png');" onclick="selectChar('p2')"></div>
+                <div class="char-select" id="sel-p3" style="background-image: url('player3.png');" onclick="selectChar('p3')"></div>
+                <div class="char-select" id="sel-p4" style="background-image: url('player4.png');" onclick="selectChar('p4')"></div>
+            </div>
+
+            <div class="btn-group">
+                <button onclick="startGame('pve')" class="btn-full" style="border-color: var(--gold); color: var(--gold);">SOLO (PLAYER VS IA)</button>
+                <button onclick="startGame('host1v1')">CRIAR SALA 1v1</button>
+                <button onclick="startGame('host2v2')">CRIAR SALA 2v2</button>
+            </div>
+            
+            <div style="margin-top: 15px; border-top: 1px solid #333; padding-top: 15px;">
+                <input type="text" id="join-id" placeholder="COLAR ID DA SALA DO AMIGO" style="margin-bottom: 10px; font-size: 0.9rem;">
+                <button id="btn-join" onclick="joinGame()" class="btn-full" style="border-color: var(--p2); color: var(--p2);">ENTRAR NA SALA</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="lobby" class="screen hidden">
+        <div class="menu-card">
+            <h1 style="font-size: 2.5rem;">SALA DE ESPERA</h1>
+            <h2 id="lobby-mode" style="color: #aaa; margin-top: 0;">...</h2>
+            
+            <div style="background: rgba(255,0,255,0.1); border: 1px solid var(--p2); padding: 10px; border-radius: 5px;">
+                <p style="margin: 0; color: #ccc;">ID DA SALA PARA CONVITE:</p>
+                <b id="lobby-id" style="color: var(--p2); font-size: 1.5rem; cursor:pointer;" onclick="copyId()">GERANDO...</b>
+            </div>
+
+            <div id="lobby-players-list"></div>
+            <p id="lobby-status" style="color: var(--gold); font-size: 1.2rem; font-weight: bold; animation: pulse 1s infinite alternate;">Aguardando jogadores...</p>
+        </div>
+    </div>
+
+    <div id="hud" class="hidden">
+        <div class="team-hud" id="team1-hud" style="color: var(--p1);"></div>
+        
+        <div id="scoreboard">
+            <div style="font-size: 0.8rem; color: var(--gold); margin-bottom: 5px;">PLACAR GLOBAL</div>
+            <div class="score-text">
+                <span id="score-val-1" class="score-t1">0</span>
+                <span>X</span>
+                <span id="score-val-2" class="score-t2">0</span>
+            </div>
+        </div>
+
+        <div class="team-hud" id="team2-hud" style="color: var(--p2); text-align: right;"></div>
+    </div>
+
+    <div id="victory-screen" class="hidden">
+        <h1 id="victory-title" style="color: var(--gold);">VITÓRIA!</h1>
+        <p id="victory-subtitle" style="color: #aaa; font-size: 1.2rem; margin-bottom: 30px;">A ARENA FOI DOMINADA</p>
+        <button id="btn-restart" onclick="restartRound()" style="font-size: 1.2rem; padding: 15px 40px; border-color: var(--gold); color: var(--gold); display: none;">NOVA RODADA</button>
+        <p id="txt-wait-host" style="color: #aaa; font-style: italic; display: none;">Aguardando o Host iniciar a nova rodada...</p>
+    </div>
+
+    <canvas id="game" width="1000" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        
+        const imgs = { p1: new Image(), p2: new Image(), p3: new Image(), p4: new Image(), cura: new Image(), tiro: new Image() };
+        imgs.p1.src = 'player1.png'; imgs.p2.src = 'player2.png'; imgs.p3.src = 'player3.png'; imgs.p4.src = 'player4.png';
+        imgs.cura.src = 'cura.png'; imgs.tiro.src = 'tiro.png';
+
+        let mySprite = 'p1';
+        let myName = 'ALUNO';
+        let peer, connections = [];
+        let isHost = false;
+        let myPlayerId = 'p_0'; 
+        let gridOffset = 0, screenShake = 0, particles = [];
+        let maxPlayers = 1;
+
+        // Estado do Jogo e Placar
+        let gameState = { players: {}, items: [], bullets: [] };
+        let scores = { t1: 0, t2: 0 };
+        let gameEnded = false;
+
+        function selectChar(charId) {
+            mySprite = charId;
+            document.querySelectorAll('.char-select').forEach(el => el.classList.remove('active'));
+            document.getElementById('sel-' + charId).classList.add('active');
+        }
+
+        function initPlayerState(id, name, sprite, team, isAi = false) {
+            let teamArr = Object.values(gameState.players).filter(p => p.team === team);
+            let idx = teamArr.length;
+            
+            const startX = team === 1 ? 50 : 890;
+            const startY = 200 + (idx * 150); 
+            
+            gameState.players[id] = { 
+                id: id, name: name || 'BOT', sprite: sprite, team: team,
+                x: startX, y: startY, hp: 100, triple: 0, isAi: isAi,
+                targetY: startY
+            };
+        }
+
+        // --- SISTEMA DE REDE E LOBBY ---
+        function startGame(mode) {
+            let inputName = document.getElementById('player-name').value;
+            if(inputName) myName = inputName.toUpperCase();
+            
+            document.getElementById('menu').classList.add('hidden');
+
+            if(mode === 'pve') {
+                document.getElementById('hud').classList.remove('hidden');
+                isHost = true;
+                myPlayerId = 'player1';
+                initPlayerState(myPlayerId, myName, mySprite, 1, false);
+                initPlayerState('bot_senai', 'IA SENAI', 'p2', 2, true);
+                requestAnimationFrame(gameLoop);
+            } else {
+                isHost = true;
+                maxPlayers = mode === 'host1v1' ? 2 : 4;
+                document.getElementById('lobby').classList.remove('hidden');
+                document.getElementById('lobby-mode').innerText = mode === 'host1v1' ? 'COMBATE 1 VS 1' : 'COMBATE 2 VS 2';
+                
+                if(peer) peer.destroy();
+                peer = new Peer();
+                
+                peer.on('open', id => { document.getElementById('lobby-id').innerText = id; });
+                peer.on('error', err => { alert("Erro ao criar sala!"); location.reload(); });
+                
+                myPlayerId = 'host';
+                initPlayerState(myPlayerId, myName, mySprite, 1, false);
+                updateLobbyUI();
+
+                peer.on('connection', conn => {
+                    connections.push(conn);
+                    let newClientId = 'client_' + connections.length;
+                    conn.on('data', data => handleClientData(newClientId, data, conn));
+                });
+            }
+        }
+
+        function joinGame() {
+            let inputName = document.getElementById('player-name').value;
+            if(inputName) myName = inputName.toUpperCase();
+            
+            let hostId = document.getElementById('join-id').value.trim();
+            if(!hostId) { alert("Cole o ID da sala!"); return; }
+
+            let btn = document.getElementById('btn-join');
+            btn.innerText = "CONECTANDO...";
+
+            if(peer) peer.destroy();
+            peer = new Peer();
+            
+            peer.on('open', () => {
+                let conn = peer.connect(hostId);
+                
+                conn.on('open', () => {
+                    isHost = false;
+                    document.getElementById('menu').classList.add('hidden');
+                    document.getElementById('lobby').classList.remove('hidden');
+                    document.getElementById('lobby-id').innerText = hostId;
+                    document.getElementById('lobby-mode').innerText = "AGUARDANDO HOST...";
+                    
+                    connections.push(conn);
+                    conn.send({ type: 'join', name: myName, sprite: mySprite });
+                    btn.innerText = "ENTRAR NA SALA";
+                });
+
+                conn.on('data', data => {
+                    if(data.type === 'lobby_update') {
+                        gameState.players = data.players;
+                        maxPlayers = data.max;
+                        updateLobbyUI();
+                    }
+                    if(data.type === 'welcome') myPlayerId = data.id;
+                    if(data.type === 'start_game') {
+                        gameState = data.state;
+                        startActualGame();
+                    }
+                    if(data.type === 'sync') gameState = data.state;
+                    if(data.type === 'shot') createParticles(data.x, data.y, data.color);
+                    if(data.type === 'game_over') triggerGameOver(data.winner, data.scores);
+                    if(data.type === 'restart') resetForNewRound(data.state, data.scores);
+                    if(data.type === 'error') { alert(data.msg); location.reload(); }
+                });
+            });
+
+            peer.on('error', err => { alert("ID Inválido ou Sala Fechada!"); btn.innerText = "ENTRAR NA SALA"; });
+        }
+
+        function handleClientData(clientId, data, conn) {
+            if(data.type === 'join') {
+                let currentCount = Object.keys(gameState.players).length;
+                if(currentCount >= maxPlayers) { conn.send({ type: 'error', msg: 'A sala está cheia!' }); return; }
+
+                let assignedTeam = 2;
+                if(maxPlayers === 4 && currentCount === 1) assignedTeam = 1;
+
+                initPlayerState(clientId, data.name, data.sprite, assignedTeam, false);
+                conn.send({ type: 'welcome', id: clientId, team: assignedTeam });
+                broadcastLobby();
+
+                if(Object.keys(gameState.players).length === maxPlayers) {
+                    document.getElementById('lobby-status').innerText = "INICIANDO ARENA...";
+                    setTimeout(() => {
+                        connections.forEach(c => c.send({ type: 'start_game', state: gameState }));
+                        startActualGame();
+                    }, 1500);
+                }
+            }
+            if(data.type === 'input' && gameState.players[clientId] && !gameEnded) {
+                gameState.players[clientId].y = data.y;
+                gameState.players[clientId].x = data.x;
+                if(data.shot) spawnBullet(clientId);
+            }
+        }
+
+        function updateLobbyUI() {
+            let count = Object.keys(gameState.players).length;
+            let html = '';
+            Object.values(gameState.players).forEach(p => {
+                let color = p.team === 1 ? 'var(--p1)' : 'var(--p2)';
+                html += `<div class="lobby-slot" style="color: ${color}">[${p.team === 1 ? 'VERDE' : 'ROSA'}] - ${p.name}</div>`;
+            });
+            document.getElementById('lobby-players-list').innerHTML = html;
+            document.getElementById('lobby-status').innerText = `Aguardando jogadores... (${count}/${maxPlayers})`;
+        }
+
+        function broadcastLobby() { updateLobbyUI(); connections.forEach(c => c.send({ type: 'lobby_update', players: gameState.players, max: maxPlayers })); }
+
+        function startActualGame() {
+            document.getElementById('lobby').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            requestAnimationFrame(gameLoop);
+        }
+
+        function copyId() { navigator.clipboard.writeText(document.getElementById('lobby-id').innerText); alert("ID Copiado!"); }
+
+        // --- CONTROLES E FÍSICA ---
+        window.addEventListener('mousemove', e => {
+            if(gameEnded || !gameState.players[myPlayerId] || gameState.players[myPlayerId].hp <= 0) return;
+            const rect = canvas.getBoundingClientRect();
+            let my = Math.max(0, Math.min(canvas.height - 60, e.clientY - rect.top - 30));
+            let mx = e.clientX - rect.left - 30;
+            
+            let p = gameState.players[myPlayerId];
+            p.y = my;
+            p.x = p.team === 1 ? Math.max(0, Math.min(440, mx)) : Math.max(500, Math.min(canvas.width - 60, mx));
+
+            if(!isHost && connections[0]) connections[0].send({ type: 'input', x: p.x, y: p.y, shot: false });
+        });
+
+        window.addEventListener('mousedown', () => {
+            if(gameEnded || !gameState.players[myPlayerId] || gameState.players[myPlayerId].hp <= 0) return;
+            if(isHost) spawnBullet(myPlayerId);
+            else if(connections[0]) connections[0].send({ type: 'input', x: gameState.players[myPlayerId].x, y: gameState.players[myPlayerId].y, shot: true });
+        });
+
+        function spawnBullet(pID) {
+            const p = gameState.players[pID];
+            if(!p || p.hp <= 0) return;
+            const side = p.team === 1 ? 1 : -1;
+            const x = p.team === 1 ? p.x + 60 : p.x - 20;
+            
+            gameState.bullets.push({ owner: pID, team: p.team, x, y: p.y + 28, vx: 18 * side, vy: 0 });
+            if(p.triple > 0) {
+                gameState.bullets.push({ owner: pID, team: p.team, x, y: p.y + 28, vx: 18 * side, vy: -4 });
+                gameState.bullets.push({ owner: pID, team: p.team, x, y: p.y + 28, vx: 18 * side, vy: 4 });
+                p.triple--;
+            }
+        }
+
+        function createParticles(x, y, color) {
+            for(let i=0; i<8; i++) particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1, color });
+        }
+
+        // --- SISTEMA DE PONTUAÇÃO E REINÍCIO ---
+        function checkWinCondition() {
+            if(gameEnded || !isHost) return;
+            
+            let t1Alive = Object.values(gameState.players).some(p => p.team === 1 && p.hp > 0);
+            let t2Alive = Object.values(gameState.players).some(p => p.team === 2 && p.hp > 0);
+
+            if(!t1Alive || !t2Alive) {
+                let winner = !t1Alive ? 2 : 1;
+                if(winner === 1) scores.t1++; else scores.t2++;
+                
+                triggerGameOver(winner, scores);
+                connections.forEach(c => c.send({ type: 'game_over', winner: winner, scores: scores }));
+            }
+        }
+
+        function triggerGameOver(winnerTeam, newScores) {
+            gameEnded = true;
+            scores = newScores;
+            document.getElementById('score-val-1').innerText = scores.t1;
+            document.getElementById('score-val-2').innerText = scores.t2;
+
+            let vicScreen = document.getElementById('victory-screen');
+            let vicTitle = document.getElementById('victory-title');
+            
+            vicScreen.classList.remove('hidden');
+            if(winnerTeam === 1) {
+                vicTitle.innerText = "TIME VERDE VENCEU!";
+                vicTitle.style.color = "var(--p1)";
+                vicTitle.style.textShadow = "0 0 20px var(--p1)";
+            } else {
+                vicTitle.innerText = "TIME ROSA VENCEU!";
+                vicTitle.style.color = "var(--p2)";
+                vicTitle.style.textShadow = "0 0 20px var(--p2)";
+            }
+
+            if(isHost) {
+                document.getElementById('btn-restart').style.display = 'block';
+                document.getElementById('txt-wait-host').style.display = 'none';
+            } else {
+                document.getElementById('btn-restart').style.display = 'none';
+                document.getElementById('txt-wait-host').style.display = 'block';
+            }
+        }
+
+        function restartRound() {
+            if(!isHost) return;
+            // Reposiciona e cura todos
+            let t1Count = 0, t2Count = 0;
+            Object.values(gameState.players).forEach(p => {
+                p.hp = 100; p.triple = 0;
+                if(p.team === 1) { p.x = 50; p.y = 200 + (t1Count * 150); t1Count++; }
+                else { p.x = 890; p.y = 200 + (t2Count * 150); t2Count++; }
+                p.targetY = p.y;
+            });
+            gameState.bullets = []; gameState.items = [];
+            
+            resetForNewRound(gameState, scores);
+            connections.forEach(c => c.send({ type: 'restart', state: gameState, scores: scores }));
+        }
+
+        function resetForNewRound(newState, newScores) {
+            gameState = newState;
+            scores = newScores;
+            gameEnded = false;
+            document.getElementById('victory-screen').classList.add('hidden');
+        }
+
+        // --- LOOP PRINCIPAL DO JOGO ---
+        function gameLoop() {
+            ctx.save();
+            if(screenShake > 0) { ctx.translate(Math.random()*screenShake, Math.random()*screenShake); screenShake -= 0.5; }
+
+            ctx.fillStyle = '#050508'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = '#00f2ff11'; ctx.lineWidth = 1;
+            gridOffset = (gridOffset + 1) % 40;
+            for(let x = gridOffset; x < canvas.width; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke(); }
+            for(let y = 0; y < canvas.height; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke(); }
+
+            if(isHost && !gameEnded) hostLogic();
+
+            renderGame();
+            updateHUD();
+            
+            if(isHost && !gameEnded) checkWinCondition();
+
+            if(isHost && connections.length > 0 && !gameEnded) {
+                connections.forEach(c => c.send({ type: 'sync', state: gameState }));
+            }
+
+            ctx.restore();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function hostLogic() {
+            Object.values(gameState.players).forEach(p => {
+                if(p.isAi && p.hp > 0) {
+                    p.y += (p.targetY - p.y) * 0.05;
+                    if(Math.random() < 0.03) p.targetY = Math.random() * (canvas.height - 60);
+                    if(Math.random() < 0.04) spawnBullet(p.id);
+                }
+            });
+
+            if(Math.random() < 0.01) gameState.items.push({ x: 300 + Math.random()*400, y: -50, type: Math.random() > 0.4 ? 'cura' : 'tiro', speed: 3 });
+
+            gameState.items.forEach((it, i) => {
+                it.y += it.speed;
+                Object.values(gameState.players).forEach(p => {
+                    if(p.hp > 0 && it.x < p.x + 50 && it.x + 40 > p.x && it.y < p.y + 50 && it.y + 40 > p.y) {
+                        if(it.type === 'cura') p.hp = Math.min(100, p.hp + 30); else p.triple += 5;
+                        gameState.items.splice(i, 1);
+                    }
+                });
+            });
+
+            for(let i = gameState.bullets.length - 1; i >= 0; i--) {
+                let b = gameState.bullets[i];
+                b.x += b.vx; b.y += b.vy;
+                
+                let hit = false;
+                Object.values(gameState.players).forEach(p => {
+                    if(p.hp > 0 && b.team !== p.team && b.x > p.x && b.x < p.x+60 && b.y > p.y && b.y < p.y+60) {
+                        p.hp -= 5;
+                        let color = b.team === 1 ? '#00ff41' : '#ff00ff';
+                        createParticles(b.x, b.y, color);
+                        screenShake = 3; hit = true;
+                        connections.forEach(c => c.send({ type: 'shot', x: b.x, y: b.y, color }));
+                    }
+                });
+
+                if(hit || b.x < -50 || b.x > canvas.width + 50) gameState.bullets.splice(i, 1);
+            }
+        }
+
+        function renderGame() {
+            gameState.items.forEach(it => {
+                ctx.shadowBlur = 15; ctx.shadowColor = it.type === 'cura' ? '#0f0' : '#ff0';
+                if(imgs[it.type].complete) ctx.drawImage(imgs[it.type], it.x, it.y, 40, 40);
+            });
+
+            gameState.bullets.forEach(b => {
+                let color = b.team === 1 ? '#00ff41' : '#ff00ff';
+                ctx.shadowBlur = 10; ctx.shadowColor = color; ctx.fillStyle = color;
+                ctx.fillRect(b.x, b.y, 20, 4);
+            });
+
+            particles.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+                ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillRect(p.x, p.y, 4, 4);
+                if(p.life <= 0) particles.splice(i, 1);
+            });
+            ctx.globalAlpha = 1;
+
+            Object.values(gameState.players).forEach(p => {
+                if(p.hp <= 0) { ctx.globalAlpha = 0.3; } // Fantasma se estiver morto
+                ctx.shadowBlur = p.team === 1 ? 20 : 15; 
+                ctx.shadowColor = p.team === 1 ? 'rgba(0, 255, 65, 0.4)' : 'rgba(255, 0, 255, 0.4)';
+                
+                if(imgs[p.sprite] && imgs[p.sprite].complete) {
+                    ctx.drawImage(imgs[p.sprite], p.x, p.y, 60, 60);
+                }
+
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+                ctx.fillStyle = 'white'; ctx.font = '12px Orbitron'; ctx.textAlign = 'center';
+                ctx.fillText(p.name, p.x + 30, p.y - 10);
+            });
+        }
+
+        function updateHUD() {
+            let t1HTML = '', t2HTML = '';
+            Object.values(gameState.players).forEach(p => {
+                let color = p.team === 1 ? 'var(--p1)' : 'var(--p2)';
+                let hpShow = Math.max(0, p.hp);
+                let html = `
+                    <div style="${hpShow === 0 ? 'opacity: 0.5;' : ''}">
+                        <div class="hp-label"><span>${p.name}</span> <span>${hpShow}%</span></div>
+                        <div class="hp-bar"><div class="hp-fill" style="width: ${hpShow}%; background: ${color}; box-shadow: 0 0 10px ${color};"></div></div>
+                    </div>`;
+                if(p.team === 1) t1HTML += html; else t2HTML += html;
+            });
+            document.getElementById('team1-hud').innerHTML = t1HTML;
+            document.getElementById('team2-hud').innerHTML = t2HTML;
+            document.getElementById('score-val-1').innerText = scores.t1;
+            document.getElementById('score-val-2').innerText = scores.t2;
+        }
+    </script>
+</body>
+</html>
