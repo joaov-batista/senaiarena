@@ -99,8 +99,8 @@
                 <div><div class="item-title">💣 Granada (granada.png)</div>Aperte E para lançar. Explode em área ao chegar perto do inimigo.</div>
                 <div><div class="item-title">🐟 Especial (especial.png)</div>Aperte R (requer Mana 100%). Lança uma bomba colossal que detona em área.</div>
                 <div><div class="item-title">❄️ Freeze (freeze.png)</div>Ao pegar, congela todo o time inimigo por exatos 1 segundo.</div>
-                <div><div class="item-title">⚡ Raio (raio.png)</div>Ao pegar, um raio gigante cai do céu em cima de todos os inimigos vivos.</div>
-                <div><div class="item-title">🍒 Cereja (cereja.png)</div>Transforma seus próximos 3 tiros. Se chegarem no lado inimigo sem bater em ninguém, se fragmentam em 3!</div>
+                <div><div class="item-title">⚡ Raio (raio.png)</div>Ao pegar, um raio gigante cai do céu em cima de todos os inimigos vivos (15 de Dano).</div>
+                <div><div class="item-title">🍒 Cereja (cereja.png)</div>Transforma seus próximos 3 tiros. Se chegarem no lado inimigo sem bater, se fragmentam em 3!</div>
             </div>
         </div>
     </div>
@@ -145,7 +145,6 @@
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
         
-        // Novas Imagens adicionadas
         const imgs = { 
             p1: new Image(), p2: new Image(), p3: new Image(), p4: new Image(), 
             p5: new Image(), p6: new Image(), p7: new Image(),
@@ -164,7 +163,6 @@
         let peer, connections = [], isHost = false, myPlayerId = 'p_0'; 
         let gridOffset = 0, screenShake = 0, particles = [], maxPlayers = 1, clientCounter = 1;
 
-        // Novo array para os raios divinos: lightnings
         let gameState = { players: {}, items: [], bullets: [], explosions: [], lightnings: [] };
         let scores = { t1: 0, t2: 0 }, gameEnded = false;
 
@@ -174,7 +172,6 @@
             document.getElementById('sel-' + charId).classList.add('active');
         }
 
-        // Adicionado: cherryShots no PlayerState
         function initPlayerState(id, name, sprite, team, isAi = false) {
             let teamArr = Object.values(gameState.players).filter(p => p.team === team);
             let idx = teamArr.length;
@@ -290,7 +287,6 @@
         function startActualGame() { document.getElementById('lobby').classList.add('hidden'); document.getElementById('hud').classList.remove('hidden'); requestAnimationFrame(gameLoop); }
         function copyId() { navigator.clipboard.writeText(document.getElementById('lobby-id').innerText); alert("ID Copiado!"); }
 
-        // --- SISTEMA DE CONTROLES E TAB ---
         window.addEventListener('keydown', e => {
             if(e.key === 'Tab') { e.preventDefault(); document.getElementById('controls-overlay').style.display = 'flex'; }
             let key = e.key.toLowerCase();
@@ -416,7 +412,6 @@
         }
 
         function hostLogic() {
-            // Atualiza status de IA e de Jogadores
             Object.values(gameState.players).forEach(p => {
                 if(p.hp > 0) {
                     p.mana = Math.min(100, p.mana + 0.15); 
@@ -432,24 +427,22 @@
                 }
             });
 
-            // Fade de Explosões e Raios
+            // Fade Prolongado das Animações (para dar pra enxergar as magias)
             for(let i = gameState.explosions.length - 1; i >= 0; i--) {
-                gameState.explosions[i].life -= 0.05; 
+                gameState.explosions[i].life -= 0.025; // Animação mais lenta
                 if(gameState.explosions[i].life <= 0) gameState.explosions.splice(i, 1);
             }
             for(let i = gameState.lightnings.length - 1; i >= 0; i--) {
-                gameState.lightnings[i].life -= 0.04; 
+                gameState.lightnings[i].life -= 0.025; // Animação do raio mais lenta
                 if(gameState.lightnings[i].life <= 0) gameState.lightnings.splice(i, 1);
             }
 
-            // Drops do Céu
             if(Math.random() < 0.015) {
                 const dropTypes = ['cura', 'tiro', 'shield', 'granada', 'freeze', 'raio', 'cereja'];
                 const type = dropTypes[Math.floor(Math.random() * dropTypes.length)];
                 gameState.items.push({ x: 300 + Math.random()*400, y: -50, type: type, speed: 2.5 });
             }
 
-            // Coleta de Itens
             gameState.items.forEach((it, i) => {
                 it.y += it.speed;
                 Object.values(gameState.players).forEach(p => {
@@ -463,13 +456,12 @@
                             screenShake = 5;
                         }
                         else if(it.type === 'cereja') {
-                            p.cherryShots += 3; // Ganha 3 tiros gigantes
+                            p.cherryShots += 3;
                         }
                         else if(it.type === 'raio') {
-                            // FÚRIA DE ZEUS - Acerta todo mundo do outro time
                             Object.values(gameState.players).forEach(enemy => {
                                 if(enemy.team !== p.team && enemy.hp > 0) {
-                                    enemy.hp -= 30; // Dano do Raio
+                                    enemy.hp -= 15; // Dano do Raio Balanceado
                                     gameState.lightnings.push({x: enemy.x + 30, y: enemy.y, life: 1});
                                 }
                             });
@@ -480,7 +472,6 @@
                 });
             });
 
-            // Tiros e Física
             for(let i = gameState.bullets.length - 1; i >= 0; i--) {
                 let b = gameState.bullets[i];
                 b.x += b.vx; b.y += b.vy;
@@ -488,30 +479,25 @@
                 let hitPlayer = null;
                 let w = b.type === 'cherry' || b.type === 'special' ? 40 : 20; 
                 
-                // Checa colisão
                 Object.values(gameState.players).forEach(p => {
                     if(p.hp > 0 && b.team !== p.team && b.x + w > p.x && b.x < p.x+60 && b.y + w > p.y && b.y < p.y+60) {
                         hitPlayer = p;
                     }
                 });
 
-                // LÓGICA DE AIRBURST (Granada e Especial explodem no ar ao cruzar a arena)
                 let triggeredAirburst = false;
                 if(b.type === 'grenade' || b.type === 'special') {
-                    if(b.team === 1 && b.x > 750) triggeredAirburst = true; // Invadiu a base direita
-                    if(b.team === 2 && b.x < 250) triggeredAirburst = true; // Invadiu a base esquerda
+                    if(b.team === 1 && b.x > 750) triggeredAirburst = true; 
+                    if(b.team === 2 && b.x < 250) triggeredAirburst = true; 
                 }
 
-                // LÓGICA DA CEREJA DIVIDINDO
                 let triggeredCherrySplit = false;
                 if(b.type === 'cherry' && !hitPlayer) {
-                    if(b.team === 1 && b.x > 600) triggeredCherrySplit = true; // Cruzou o meio pra direita
-                    if(b.team === 2 && b.x < 400) triggeredCherrySplit = true; // Cruzou o meio pra esquerda
+                    if(b.team === 1 && b.x > 600) triggeredCherrySplit = true; 
+                    if(b.team === 2 && b.x < 400) triggeredCherrySplit = true; 
                 }
 
-                // Processa Eventos de Projéteis
                 if (triggeredCherrySplit) {
-                    // CEREJA ESTILHAÇA! Solta 3 tiros normais/menores
                     let side = b.team === 1 ? 1 : -1;
                     gameState.bullets.push({ owner: b.owner, team: b.team, type: 'cherry_small', x: b.x, y: b.y, vx: 15 * side, vy: -5 });
                     gameState.bullets.push({ owner: b.owner, team: b.team, type: 'cherry_small', x: b.x, y: b.y, vx: 15 * side, vy: 0 });
@@ -522,11 +508,10 @@
                     let hitX = b.x + w/2; 
                     let hitY = b.y + w/2;
 
-                    // GRANADA E ESPECIAL -> EXPLOSÃO EM ÁREA (AoE)
                     if (b.type === 'grenade' || b.type === 'special') {
                         let isSpecial = b.type === 'special';
-                        let radius = isSpecial ? 220 : 120; // 220 pro Especial, 120 pra granada
-                        let dmg = isSpecial ? 40 : 20;
+                        let radius = isSpecial ? 160 : 120; // Raio Balanceado
+                        let dmg = isSpecial ? 25 : 15; // Dano Balanceado
                         let color = isSpecial ? 'rgba(0, 136, 255, 0.7)' : 'rgba(255, 85, 0, 0.7)';
 
                         gameState.explosions.push({x: hitX, y: hitY, radius: radius, color: color, life: 1});
@@ -543,14 +528,13 @@
                             }
                         });
                     } 
-                    // CEREJA GIGANTE E HIT DIRETO
                     else if (hitPlayer && (b.type === 'cherry' || b.type === 'normal' || b.type === 'cherry_small')) {
-                        let dmg = 5; // Normal e cherry_small = 5 dano
-                        if (b.type === 'cherry') dmg = 25; // Hit de cereja grande = 25 dano!
+                        let dmg = 5; 
+                        if (b.type === 'cherry') dmg = 25; 
                         
                         if(hitPlayer.shield > 0) { 
                             hitPlayer.shield--; 
-                            if(b.type === 'cherry') hitPlayer.shield = 0; // Cereja grande também quebra o escudo rápido
+                            if(b.type === 'cherry') hitPlayer.shield = 0; 
                         } else { 
                             hitPlayer.hp -= dmg; 
                         }
@@ -564,34 +548,35 @@
         }
 
         function renderGame() {
-            // Render Raios do Céu
             gameState.lightnings.forEach(lt => {
                 ctx.fillStyle = `rgba(255, 255, 100, ${lt.life})`;
                 ctx.shadowBlur = 40; ctx.shadowColor = '#ffff00';
-                ctx.fillRect(lt.x - 20, 0, 40, canvas.height); // Pilar de luz de cima a baixo
-                ctx.fillStyle = `rgba(255, 255, 255, ${lt.life})`; // Núcleo branco
+                ctx.fillRect(lt.x - 20, 0, 40, canvas.height); 
+                ctx.fillStyle = `rgba(255, 255, 255, ${lt.life})`; 
                 ctx.fillRect(lt.x - 5, 0, 10, canvas.height);
                 ctx.shadowBlur = 0;
             });
 
-            // Render Explosões
             gameState.explosions.forEach(exp => {
                 ctx.beginPath();
+                // Efeito visual de onda de expansão (fica mais top)
                 let currentRadius = exp.radius * (1.2 - exp.life);
                 ctx.arc(exp.x, exp.y, currentRadius, 0, Math.PI * 2);
                 ctx.fillStyle = exp.color;
                 ctx.globalAlpha = exp.life;
                 ctx.fill();
+                // Bordas mais fortes pra explosão
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = exp.color.replace('0.7', '1');
+                ctx.stroke();
                 ctx.globalAlpha = 1;
             });
 
-            // Render Itens Caindo
             gameState.items.forEach(it => {
                 ctx.shadowBlur = 15; ctx.shadowColor = '#fff';
                 if(imgs[it.type] && imgs[it.type].complete) ctx.drawImage(imgs[it.type], it.x, it.y, 40, 40);
             });
 
-            // Render Tiros
             gameState.bullets.forEach(b => {
                 if(b.type === 'normal') {
                     let color = b.team === 1 ? '#00ff41' : '#ff00ff';
@@ -605,14 +590,13 @@
                     ctx.drawImage(imgs.granada, b.x, b.y, 30, 30);
                 } else if(b.type === 'cherry' && imgs.cereja.complete) {
                     ctx.shadowBlur = 15; ctx.shadowColor = '#ff0044';
-                    ctx.drawImage(imgs.cereja, b.x, b.y, 40, 40); // Tiro gigante
+                    ctx.drawImage(imgs.cereja, b.x, b.y, 40, 40); 
                 } else if(b.type === 'cherry_small') {
                     ctx.shadowBlur = 5; ctx.shadowColor = '#ff0044'; ctx.fillStyle = '#ff0044';
-                    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill(); // Tiro pequeno fragmentado
+                    ctx.beginPath(); ctx.arc(b.x, b.y, 6, 0, Math.PI*2); ctx.fill(); 
                 }
             });
 
-            // Render Partículas
             particles.forEach((p, i) => {
                 p.x += p.vx; p.y += p.vy; p.life -= 0.05;
                 ctx.fillStyle = p.color; ctx.globalAlpha = Math.max(0, p.life);
@@ -621,7 +605,6 @@
             });
             ctx.globalAlpha = 1;
 
-            // Render Jogadores
             Object.values(gameState.players).forEach(p => {
                 if(p.hp <= 0) { ctx.globalAlpha = 0.3; }
                 
