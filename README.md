@@ -27,7 +27,7 @@ Para testar o jogo em sua máquina, siga os passos abaixo:
 
 1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/seu-usuario/senaiarena.git
+   git clone https://github.com/joaov-batista/senai-star-battle.git
    ```
 
 2. **Acesse a pasta do projeto:**
