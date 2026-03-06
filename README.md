@@ -23,7 +23,7 @@ No **SENAI Star Battle**, você controla uma nave personalizada com o rosto dos 
 
 ## 🚀 Como Rodar Localmente
 
-Para testar o jogo em sua máquina, siga os passos abaixo:
+Para testar o jogo em sua máquina, acesse o site https://senaiarena.vercel.app/ ou siga os passos abaixo ou acesse:
 
 1. **Clone o repositório:**
    ```bash
